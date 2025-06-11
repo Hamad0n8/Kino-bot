@@ -8,7 +8,7 @@ import re
 import os
 
 TOKEN = '8001085363:AAF-MTQYu5dmYQhLJEBXcbSyEkPdr5GZbek'
-ADMIN_ID = 6454516935  # Telegram ID-и админи аслӣ
+ADMIN_ID = 6862331593 # Telegram ID-и админи аслӣ
 
 bot = telebot.TeleBot(TOKEN)
 app = Flask(__name__)
