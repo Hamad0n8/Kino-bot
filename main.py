@@ -7,7 +7,7 @@ import time
 import re
 import os
 
-TOKEN = '7947429084:AAECl4VTgRdgv53IAixvZ5qgDMvABI8_d0o'
+TOKEN = 'BOT_TOKEN'
 ADMIN_ID = 6454516935  # Telegram ID-и админи аслӣ
 
 bot = telebot.TeleBot(TOKEN)
