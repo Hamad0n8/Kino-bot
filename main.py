@@ -7,7 +7,7 @@ import time
 import re
 import os
 
-TOKEN = 'TOKEN'
+TOKEN = '8001085363:AAF-MTQYu5dmYQhLJEBXcbSyEkPdr5GZbek'
 ADMIN_ID = 6454516935  # Telegram ID-и админи аслӣ
 
 bot = telebot.TeleBot(TOKEN)
@@ -630,7 +630,7 @@ def process_backup(msg):
 if __name__ == "__main__":
     # Барқарор кардани вебхук
     bot.remove_webhook()
-    bot.set_webhook(url=f"https://kino-bot-nvqw.onrender.com/TKEN")
+    bot.set_webhook(url=f"https://kino-bot-nvqw.onrender.com/8001085363:AAF-MTQYu5dmYQhLJEBXcbSyEkPdr5GZbek")
     
     # Оғози сервер Flask
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 11000)))
