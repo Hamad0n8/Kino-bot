@@ -451,4 +451,186 @@ def process_delete_movie(msg):
             bot.send_message(msg.chat.id, "**Филм ёфт нашуд.**", parse_mode="Markdown")
         user_states.pop(msg.chat.id)
 
+    def schedule_delete_message(chat_id, message_id, delete_time):
+    """Функсия барои нест кардани автоматии паём баъд аз вақти муайян"""
+    time.sleep(delete_time)
+    try:
+        bot.delete_message(chat_id, message_id)
+    except Exception as e:
+        print(f"Хатогӣ ҳангоми нест кардани паём: {e}")
+
+@bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == "waiting_for_movie_id")
+def serve_movie(msg):
+    if is_subscribed(msg.chat.id):
+        # Санҷиш барои ID филм
+        movie_id = msg.text
+        
+        # Санҷиш барои маҷмӯа
+        if movie_id in db["collections"]:
+            # Равон кардани ҳушдор дар бораи вақти нест кардан
+            warning_msg = bot.send_message(
+                msg.chat.id, 
+                f"**⚠️ Диққат! Ин филмҳо баъди {db['delete_time']} сония нест мешаванд. Лутфан, агар зарур бошад ба дӯстон ё ба избранное фиристед! ⚠️**", 
+                parse_mode="Markdown"
+            )
+            
+            # Равон кардани ҳамаи филмҳои маҷмӯа
+            bot.send_message(msg.chat.id, "**Маҷмӯаи филмҳо бо ID " + movie_id + ":**", parse_mode="Markdown")
+            for movie in db["collections"][movie_id]["movies"]:
+                sent_movie = bot.send_video(msg.chat.id, movie["file_id"])
+                # Scheduling message deletion after the specified time
+                threading.Thread(
+                    target=schedule_delete_message,
+                    args=(msg.chat.id, sent_movie.message_id, db['delete_time'])
+                ).start()
+            
+            # Schedule deletion for the warning message as well
+            threading.Thread(
+                target=schedule_delete_message,
+                args=(msg.chat.id, warning_msg.message_id, db['delete_time'])
+            ).start()
+            
+            user_states.pop(msg.chat.id)
+            return
+        
+        # Check for regular movie
+        if movie_id in db["movies"]:
+            # Send warning about auto-deletion
+            warning_msg = bot.send_message(
+                msg.chat.id, 
+                f"**⚠️ Диққат! Ин филм баъди {db['delete_time']} сония нест мешавад. Лутфан, агар зарур бошад ба дӯстон ё ба избранное фиристед! ⚠️**", 
+                parse_mode="Markdown"
+            )
+            
+            # Send the movie
+            movie_data = db["movies"][movie_id]
+            info = movie_data.get("info", "")
+            if info:
+                info_msg = bot.send_message(msg.chat.id, f"**🎬 Филм бо ID {movie_id}:**\n\n{info}", parse_mode="Markdown")
+                # Schedule deletion for info message
+                threading.Thread(
+                    target=schedule_delete_message, 
+                    args=(msg.chat.id, info_msg.message_id, db['delete_time'])
+                ).start()
+            
+            # Send video and schedule its deletion
+            sent_movie = bot.send_video(msg.chat.id, movie_data["file_id"])
+            threading.Thread(
+                target=schedule_delete_message, 
+                args=(msg.chat.id, sent_movie.message_id, db['delete_time'])
+            ).start()
+            
+            # Schedule deletion for warning message
+            threading.Thread(
+                target=schedule_delete_message, 
+                args=(msg.chat.id, warning_msg.message_id, db['delete_time'])
+            ).start()
+        else:
+            bot.send_message(msg.chat.id, "**Филм бо чунин ID ёфт нашуд.**", parse_mode="Markdown")
+        
+        user_states.pop(msg.chat.id)
+    else:
+        start(msg)
+
+@bot.message_handler(func=lambda msg: msg.text == "⏱ Танзимоти вақт" and is_admin(msg.from_user.id))
+def time_settings(msg):
+    user_states[msg.chat.id] = "waiting_for_delete_time"
+    bot.send_message(
+        msg.chat.id, 
+        f"**Вақти ҳозира барои нест кардани филмҳо: {db['delete_time']} сония.**\n\n**Вақти навро бо сония ворид кунед:**", 
+        parse_mode="Markdown"
+    )
+
+@bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == "waiting_for_delete_time")
+def set_delete_time(msg):
+    if is_admin(msg.from_user.id):
+        try:
+            delete_time = int(msg.text)
+            if delete_time < 10:
+                bot.send_message(msg.chat.id, "**Вақти нест кардан бояд ҳадди ақал 10 сония бошад.**", parse_mode="Markdown")
+            else:
+                db["delete_time"] = delete_time
+                save_db()
+                bot.send_message(msg.chat.id, f"**Вақти нест кардани файлҳо ба {delete_time} сония танзим шуд.**", parse_mode="Markdown")
+                user_states.pop(msg.chat.id)
+        except ValueError:
+            bot.send_message(msg.chat.id, "**Лутфан танҳо рақам ворид кунед.**", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda msg: msg.text == "📊 Статистика" and is_admin(msg.from_user.id))
+def statistics(msg):
+    movie_count = len(db["movies"])
+    channel_count = len(db["channels"])
+    admin_count = len(db["admins"])
+    collection_count = len(db["collections"])
     
+    stats = f"**📊 Статистика:**\n\n" \
+           f"**📽 Шумораи филмҳо:** {movie_count}\n" \
+           f"**📺 Шумораи каналҳо:** {channel_count}\n" \
+           f"**👨‍💻 Шумораи админҳо:** {admin_count}\n" \
+           f"**📚 Шумораи маҷмӯаҳо:** {collection_count}\n" \
+           f"**⏱ Вақти нест кардан:** {db['delete_time']} сония"
+    
+    bot.send_message(msg.chat.id, stats, parse_mode="Markdown")
+
+@bot.message_handler(func=lambda msg: msg.text == "🗑 Тозакунии кэш" and is_admin(msg.from_user.id))
+def clear_cache(msg):
+    # Тозакунии кэши ботро иҷро мекунем
+    user_states.clear()
+    movie_info_temp.clear()
+    collection_temp.clear()
+    bot.send_message(msg.chat.id, "**🗑 Кэш тоза шуд.**", parse_mode="Markdown")
+
+@bot.message_handler(func=lambda msg: msg.text == "🔄 Барқароркунӣ" and is_admin(msg.from_user.id))
+def restore_backup(msg):
+    user_states[msg.chat.id] = "waiting_for_backup"
+    bot.send_message(
+        msg.chat.id, 
+        "**Барои барқароркунӣ файли захирагии JSON-ро равон кунед:**", 
+        parse_mode="Markdown"
+    )
+
+@bot.message_handler(func=lambda msg: user_states.get(msg.chat.id) == "waiting_for_backup", content_types=["document"])
+def process_backup(msg):
+    if is_admin(msg.from_user.id):
+        try:
+            file_info = bot.get_file(msg.document.file_id)
+            downloaded_file = bot.download_file(file_info.file_path)
+            
+            # Санҷиши JSON формат
+            try:
+                json_data = json.loads(downloaded_file.decode('utf-8'))
+                
+                # Санҷиши сохтори JSON
+                if not all(key in json_data for key in ["movies", "channels", "admins"]):
+                    bot.send_message(msg.chat.id, "**❌ Файли нодуруст. Сохтори JSON бояд дуруст бошад.**", parse_mode="Markdown")
+                    return
+                
+                # Барқароркунии админи аслӣ агар набошад
+                if ADMIN_ID not in json_data["admins"]:
+                    json_data["admins"].append(ADMIN_ID)
+                
+                # Сабт ва барқароркунӣ
+                with open("data.json", "w") as f:
+                    json.dump(json_data, f)
+                
+                # Барқароркунии глобалии db
+                global db
+                db = json_data
+                
+                bot.send_message(msg.chat.id, "**✅ Маълумот бомуваффақият барқарор карда шуд!**", parse_mode="Markdown")
+            except json.JSONDecodeError:
+                bot.send_message(msg.chat.id, "**❌ Файл бояд формати JSON дошта бошад.**", parse_mode="Markdown")
+                
+        except Exception as e:
+            bot.send_message(msg.chat.id, f"**❌ Хатогӣ ҳангоми барқароркунӣ: {e}**", parse_mode="Markdown")
+        
+        user_states.pop(msg.chat.id)
+
+# Оғози бот
+if __name__ == "__main__":
+    # Барқарор кардани вебхук
+    bot.remove_webhook()
+    bot.set_webhook(url=f"https://films-bot-9fxf.onrender.com/7947429084:AAECl4VTgRdgv53IAixvZ5qgDMvABI8_d0o")
+    
+    # Оғози сервер Flask
+    app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 11000)))
